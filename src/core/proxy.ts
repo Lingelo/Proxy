@@ -2,6 +2,7 @@ import {config} from "../config";
 import http, {IncomingMessage, ServerResponse} from "http";
 import httpProxy, {type ServerOptions} from "http-proxy";
 import axios from "axios";
+import logger from "../utils/logger";
 
 export interface Proxy {
     start(): Promise<void>;
@@ -31,10 +32,10 @@ export function createProxy(): Proxy {
             });
 
             server.listen(config.port, config.host, () => {
-                console.log(`Proxy démarré sur http://${config.host}:${config.port}`);
+                logger.info(`Proxy démarré sur http://${config.host}:${config.port}`);
             });
         } catch (error) {
-            console.error("Échec du démarrage du serveur proxy : ", error);
+            logger.error("Échec du démarrage du serveur proxy : ", error);
         }
     }
 
