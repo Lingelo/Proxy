@@ -1,3 +1,3 @@
-import {createProxy} from "./core/proxy";
+import {startProxyServer} from "./core/proxy";
 
-createProxy().start().then()
+startProxyServer()

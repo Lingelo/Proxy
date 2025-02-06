@@ -1,62 +1,58 @@
+import * as http from 'http';
+import httpProxy from 'http-proxy';
+import axios from 'axios';
 import {config} from "../config";
-import http, {IncomingMessage, ServerResponse} from "http";
-import httpProxy, {type ServerOptions} from "http-proxy";
-import axios from "axios";
 import logger from "../utils/logger";
 
-export interface Proxy {
-    start(): Promise<void>;
-}
+const urls = config.targets
 
-
-export function createProxy(): Proxy {
-
-    const proxy = httpProxy.createProxyServer({} as ServerOptions);
-
-    async function start(): Promise<void> {
+async function findAvailableUrl(): Promise<string | null> {
+    for (const url of urls) {
         try {
-            const firstIndex = await testURLs();
-            if (!firstIndex) {
-                throw new Error("Aucunes urls disponibles")
-            }
-
-            const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
-                proxy.web(req, res, {
-                    target: `http://${config.targets[firstIndex]}`,
-                    selfHandleResponse: false,
-                });
-
-                server.on("error", (err: Error, req_: IncomingMessage | undefined, res_: ServerResponse | undefined) => {
-                    throw new Error("Erreur serveur : " + err);
-                });
-            });
-
-            server.listen(config.port, config.host, () => {
-                logger.info(`Proxy démarré sur http://${config.host}:${config.port}`);
-            });
+            await axios.get(`http://${url}`, { timeout: config.timeout });
+            logger.info(`URL trouvée : ${url}`);
+            return url;
         } catch (error) {
-            logger.error("Échec du démarrage du serveur proxy : ", error);
+            logger.error(`URL indisponible : ${url}`);
         }
     }
-
-    return {
-        start
-    }
-
+    return null;
 }
 
-async function testURLs(): Promise<number | undefined> {
 
-    if (config.targets.length === 0) {
-        throw new Error("TARGET_URLS non définie ou ne contient aucune URL");
-    }
-
-    let firstIndex
-    for (const [index, target] of config.targets.entries()) {
+export function startProxyServer() {
+    const proxy = httpProxy.createProxyServer({});
+    const server = http.createServer(async (req, res) => {
         try {
-            await axios.head(`http://${target}`, { timeout: config.timeout });
-            firstIndex = index
-        } catch (error) {}
-    }
-    return firstIndex
+            const targetUrl = await findAvailableUrl();
+
+            if (targetUrl) {
+                logger.info(`Proxy vers ${targetUrl}`);
+                proxy.web(req, res, { target: `http://${targetUrl}` });
+            } else {
+                res.writeHead(503, { 'Content-Type': 'text/plain' });
+                res.end('Aucune URL disponible');
+            }
+        } catch (err) {
+            if (err instanceof Error) {
+                logger.error('Erreur lors du traitement de la requête :', err.message);
+            } else {
+                logger.error('Erreur lors du traitement de la requête :', err);
+            }
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Erreur interne du serveur');
+        }
+    });
+
+    proxy.on('error', (err, req, res) => {
+        logger.error('Erreur du proxy :', err.message);
+        if (res instanceof http.ServerResponse) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Erreur lors de la redirection proxy');
+        }
+    });
+
+    server.listen(config.port, config.host, () => {
+        logger.info(`Proxy démarré sur le port ${config.port}`);
+    });
 }

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "dev": "node -r ts-node/register --env-file=.env src/index.ts"
+    "dev": "node -r ts-node/register --env-file=.env src/index.ts --trace-warnings"
   },
   "keywords": [],
   "author": "",
