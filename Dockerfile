@@ -14,8 +14,11 @@ COPY . .
 # Copy .env-example to .env
 RUN cp .env-example .env
 
-# Expose the port specified in .env
+# Expose the port specified in .env (default: 7777)
 EXPOSE 7777
+
+# Make the container accessible from outside
+ENV HOST=0.0.0.0
 
 # Start the application
 CMD ["yarn", "dev"]
