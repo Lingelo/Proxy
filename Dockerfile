@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:20
 
 WORKDIR /app
 
@@ -16,9 +16,6 @@ RUN cp .env-example .env
 
 # Expose the port specified in .env (default: 7777)
 EXPOSE 7777
-
-# Make the container accessible from outside
-ENV HOST=0.0.0.0
 
 # Start the application
 CMD ["yarn", "dev"]
