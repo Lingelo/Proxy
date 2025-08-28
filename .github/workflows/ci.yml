@@ -51,21 +51,22 @@ jobs:
 
     - name: Test endpoints (smoke test)
       run: |
-        # Start server in background
-        TARGET_URLS="httpbin.org:80" \
+        # Start server in background with no targets (will be unhealthy but endpoints should work)
+        TARGET_URLS="nonexistent:9999" \
         PORT=7777 \
-        TIMEOUT=5000 \
+        TIMEOUT=1000 \
         node dist/index.js &
         SERVER_PID=$!
         
-        # Wait for server to start and health checks to complete
-        sleep 10
+        # Wait for server to start
+        sleep 5
         
-        # Test health endpoint (should be 200 with healthy target)
-        if curl -f -s http://localhost:7777/health > /dev/null; then
-          echo "✅ Health endpoint accessible"
+        # Test health endpoint (should return 503 but endpoint should be accessible)
+        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:7777/health)
+        if [ "$HTTP_STATUS" = "503" ]; then
+          echo "✅ Health endpoint accessible (correctly returns 503 for unhealthy targets)"
         else
-          echo "❌ Health endpoint failed"
+          echo "❌ Health endpoint failed with status $HTTP_STATUS"
           kill $SERVER_PID
           exit 1
         fi
@@ -134,5 +135,3 @@ jobs:
       uses: trufflesecurity/trufflehog@main
       with:
         path: ./
-        base: main
-        head: HEAD
