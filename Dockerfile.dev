@@ -1,0 +1,33 @@
+# Development Dockerfile with hot reload
+FROM node:20-alpine
+
+# Install dumb-init for signal handling
+RUN apk add --no-cache dumb-init
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json yarn.lock ./
+
+# Install all dependencies (including dev)
+RUN yarn install --frozen-lockfile
+
+# Copy source code
+COPY . .
+
+# Create non-root user for development
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S proxy -u 1001 -G nodejs && \
+    chown -R proxy:nodejs /app
+
+# Switch to non-root user
+USER proxy
+
+# Expose port
+EXPOSE 7777
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start in development mode with hot reload
+CMD ["yarn", "dev"]

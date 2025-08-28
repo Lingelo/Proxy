@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'yarn'
+
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+
+    - name: Build project
+      run: yarn build
+
+    - name: Create release archive
+      run: |
+        # Create dist archive
+        tar -czf smart-proxy-${{ github.ref_name }}.tar.gz \
+          dist/ \
+          package.json \
+          yarn.lock \
+          .env-example \
+          README.md \
+          CLAUDE.md \
+          Dockerfile
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Generate changelog from commits
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+        if [ -z "$PREVIOUS_TAG" ]; then
+          COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse)
+        else
+          COMMITS=$(git log --pretty=format:"- %s (%h)" ${PREVIOUS_TAG}..HEAD --reverse)
+        fi
+        
+        echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+        echo "## Changes in ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+        echo "" >> $GITHUB_OUTPUT
+        echo "$COMMITS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Smart Proxy ${{ github.ref_name }}
+        body: |
+          # Smart HTTP Proxy ${{ github.ref_name }}
+          
+          ## 🚀 Features
+          - Intelligent load balancing with health checks
+          - Real-time metrics and monitoring endpoints
+          - Structured logging with request correlation
+          - Docker support with multi-arch builds
+          - Configuration validation
+          
+          ## 📦 Installation
+          
+          ### With Docker
+          ```bash
+          docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          ```
+          
+          ### From Source
+          ```bash
+          curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/smart-proxy-${{ github.ref_name }}.tar.gz | tar xz
+          cd smart-proxy-${{ github.ref_name }}
+          yarn install --production
+          node dist/index.js
+          ```
+          
+          ${{ steps.changelog.outputs.CHANGELOG }}
+          
+          ## 🐳 Docker Images
+          - `ghcr.io/${{ github.repository }}:${{ github.ref_name }}`
+          - `ghcr.io/${{ github.repository }}:latest` (if this is the latest release)
+        draft: false
+        prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+
+    - name: Upload release archive
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./smart-proxy-${{ github.ref_name }}.tar.gz
+        asset_name: smart-proxy-${{ github.ref_name }}.tar.gz
+        asset_content_type: application/gzip

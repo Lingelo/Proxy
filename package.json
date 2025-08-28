@@ -1,18 +1,33 @@
 {
-  "name": "proxyopenwebui",
+  "name": "smart-http-proxy",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Intelligent HTTP proxy with load balancing, health checks, and comprehensive monitoring",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "dev": "node -r ts-node/register --env-file=.env src/index.ts --trace-warnings"
+    "dev": "node -r ts-node/register --env-file=.env src/index.ts --trace-warnings",
+    "start": "node dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "docker:build": "docker build -t smart-proxy .",
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up",
+    "docker:prod": "docker-compose up"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "proxy",
+    "load-balancer",
+    "health-check",
+    "monitoring",
+    "typescript",
+    "docker"
+  ],
+  "author": "Smart Proxy Team",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/smart-http-proxy"
+  },
   "dependencies": {
     "axios": "^1.7.9",
-    "http": "^0.0.1-security",
     "http-proxy": "^1.18.1",
     "winston": "^3.17.0"
   },
