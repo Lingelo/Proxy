@@ -4,6 +4,17 @@ import { config } from '../config';
 import { metrics } from '../utils/metrics';
 import logger from '../utils/logger';
 
+// Constants for HTTP status codes and responses
+const HTTP_STATUS = {
+    OK: 200,
+    SERVICE_UNAVAILABLE: 503,
+    INTERNAL_ERROR: 500
+} as const;
+
+const RESPONSE_HEADERS = {
+    JSON: { 'Content-Type': 'application/json' }
+} as const;
+
 interface TargetHealth {
     url: string;
     healthy: boolean;
@@ -15,12 +26,14 @@ interface TargetHealth {
 class HealthChecker {
     private healthStatus: Map<string, TargetHealth> = new Map();
     private checkInterval: NodeJS.Timeout | null = null;
+    private failureCount: Map<string, number> = new Map();
+    private circuitBreakerOpenUntil: Map<string, number> = new Map();
 
     start(): void {
         this.checkAllTargets();
         this.checkInterval = setInterval(() => {
             this.checkAllTargets();
-        }, 30000); // Check every 30 seconds
+        }, config.healthCheckInterval);
     }
 
     stop(): void {
@@ -39,13 +52,40 @@ class HealthChecker {
         metrics.setGauge('proxy_total_targets', config.targets.length);
     }
 
+    private isCircuitOpen(url: string): boolean {
+        const openUntil = this.circuitBreakerOpenUntil.get(url);
+        return openUntil ? Date.now() < openUntil : false;
+    }
+
+    private recordSuccess(url: string): void {
+        this.failureCount.delete(url);
+        this.circuitBreakerOpenUntil.delete(url);
+    }
+
+    private recordFailure(url: string): void {
+        const failures = (this.failureCount.get(url) || 0) + 1;
+        this.failureCount.set(url, failures);
+        
+        if (failures >= config.circuitBreakerThreshold) {
+            // Open circuit for 60 seconds
+            this.circuitBreakerOpenUntil.set(url, Date.now() + 60000);
+            logger.warn(`Circuit breaker opened for ${url} after ${failures} failures`);
+        }
+    }
+
     private async checkTarget(url: string): Promise<void> {
+        // Skip if circuit breaker is open
+        if (this.isCircuitOpen(url)) {
+            logger.debug(`Skipping health check for ${url} - circuit breaker open`);
+            return;
+        }
+
         const startTime = Date.now();
         
         try {
             await axios.get(`http://${url}`, { 
                 timeout: config.timeout,
-                validateStatus: (status) => status < 500 // Consider 4xx as healthy
+                validateStatus: (status) => status <= config.maxHealthyStatus
             });
             
             const responseTime = Date.now() - startTime;
@@ -57,6 +97,7 @@ class HealthChecker {
                 lastCheck: Date.now()
             });
             
+            this.recordSuccess(url);
             metrics.recordHistogram('proxy_target_response_time', responseTime);
             logger.debug(`Health check OK for ${url} (${responseTime}ms)`);
             
@@ -68,6 +109,7 @@ class HealthChecker {
                 error: error instanceof Error ? error.message : 'Unknown error'
             });
             
+            this.recordFailure(url);
             logger.warn(`Health check failed for ${url}: ${error instanceof Error ? error.message : error}`);
         }
     }
@@ -110,30 +152,45 @@ class HealthChecker {
 
 export const healthChecker = new HealthChecker();
 
-export function handleHealthEndpoint(req: http.IncomingMessage, res: http.ServerResponse): void {
-    if (req.url === '/health') {
-        healthChecker.getOverallHealth().then(health => {
-            const statusCode = health.status === 'healthy' ? 200 : 
-                             health.status === 'degraded' ? 200 : 503;
-            
-            res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(health, null, 2));
-        });
-        return;
+export async function handleHealthEndpoint(_req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    try {
+        const health = await healthChecker.getOverallHealth();
+        const statusCode = health.status === 'unhealthy' ? HTTP_STATUS.SERVICE_UNAVAILABLE : HTTP_STATUS.OK;
+        
+        res.writeHead(statusCode, RESPONSE_HEADERS.JSON);
+        res.end(JSON.stringify(health, null, 2));
+    } catch (error) {
+        logger.error('Health endpoint error:', error);
+        res.writeHead(HTTP_STATUS.INTERNAL_ERROR, RESPONSE_HEADERS.JSON);
+        res.end(JSON.stringify({ 
+            error: 'Internal server error',
+            timestamp: Date.now()
+        }));
     }
 }
 
-export function handleMetricsEndpoint(req: http.IncomingMessage, res: http.ServerResponse): void {
-    if (req.url === '/metrics') {
+export function handleMetricsEndpoint(_req: http.IncomingMessage, res: http.ServerResponse): void {
+    try {
         const allMetrics = {
             ...metrics.getAllMetrics(),
             uptime_seconds: process.uptime(),
             memory_usage: process.memoryUsage(),
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            config_summary: {
+                targets_count: config.targets.length,
+                health_check_interval: config.healthCheckInterval,
+                circuit_breaker_threshold: config.circuitBreakerThreshold
+            }
         };
         
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(HTTP_STATUS.OK, RESPONSE_HEADERS.JSON);
         res.end(JSON.stringify(allMetrics, null, 2));
-        return;
+    } catch (error) {
+        logger.error('Metrics endpoint error:', error);
+        res.writeHead(HTTP_STATUS.INTERNAL_ERROR, RESPONSE_HEADERS.JSON);
+        res.end(JSON.stringify({ 
+            error: 'Internal server error',
+            timestamp: Date.now()
+        }));
     }
 }

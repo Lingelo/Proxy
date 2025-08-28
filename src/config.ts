@@ -7,6 +7,9 @@ const rawConfig = {
     port: parseInt(process.env.PORT || "7777", 10),
     host: (process.env.HOST || "0.0.0.0") as string,
     logLevel: (process.env.LOG_LEVEL || "info") as string,
+    healthCheckInterval: parseInt(process.env.HEALTH_CHECK_INTERVAL || "30000", 10),
+    maxHealthyStatus: parseInt(process.env.MAX_HEALTHY_STATUS || "499", 10),
+    circuitBreakerThreshold: parseInt(process.env.CIRCUIT_BREAKER_THRESHOLD || "3", 10),
 };
 
 // Validate configuration

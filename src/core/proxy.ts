@@ -48,7 +48,7 @@ export function startProxyServer() {
         
         // Handle monitoring endpoints
         if (req.url === '/health') {
-            handleHealthEndpoint(req, res);
+            await handleHealthEndpoint(req, res);
             return;
         }
         

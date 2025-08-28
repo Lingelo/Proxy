@@ -20,8 +20,9 @@ The application follows a modular architecture:
 - **Configuration Helpers** (`src/utils/configHelper.ts`): Runtime warnings and configuration summary
 
 Key architectural decisions:
-- Health checks run in background (every 30s) to avoid blocking requests
+- Health checks run in background (configurable interval) to avoid blocking requests
 - Request selection uses healthy targets only with random distribution
+- Circuit breaker pattern protects against cascading failures
 - Metrics collection happens throughout the request lifecycle
 - Each request gets a unique ID for end-to-end tracing
 - Configuration validation prevents startup with invalid settings
@@ -44,15 +45,18 @@ node dist/index.js
 
 Environment variables (see `.env-example`):
 - `TARGET_URLS`: Pipe-separated list of target servers (e.g., "localhost:3000|localhost:3001")
-- `TIMEOUT`: Health check timeout in milliseconds
+- `TIMEOUT`: Health check timeout in milliseconds (default: 5000)
 - `PORT`: Proxy server port (default: 7777)
 - `HOST`: Binding host (default: 0.0.0.0)
 - `LOG_LEVEL`: Winston log level (error, warn, info, debug)
+- `HEALTH_CHECK_INTERVAL`: Health check frequency in ms (default: 30000)
+- `MAX_HEALTHY_STATUS`: Maximum HTTP status considered healthy (default: 499)
+- `CIRCUIT_BREAKER_THRESHOLD`: Failures before circuit opens (default: 3)
 
 ## Monitoring Endpoints
 
-- `GET /health`: JSON health status of proxy and all targets
-- `GET /metrics`: JSON metrics including request counts, response times, and system stats
+- `GET /health`: JSON health status of proxy and all targets with circuit breaker state
+- `GET /metrics`: JSON metrics including request counts, response times, system stats, and config summary
 
 ## Docker Usage
 

@@ -5,12 +5,13 @@ Un proxy HTTP intelligent avec load balancing automatique, monitoring avancé et
 ## ✨ Fonctionnalités
 
 - **🔄 Load Balancing Intelligent** : Distribution automatique des requêtes vers les serveurs sains
-- **🏥 Health Checks** : Vérifications périodiques de la santé des targets en arrière-plan
-- **📊 Métriques & Monitoring** : Endpoints `/health` et `/metrics` pour l'observabilité
+- **🏥 Health Checks** : Vérifications périodiques configurables avec circuit breaker
+- **📊 Métriques & Monitoring** : Endpoints `/health` et `/metrics` enrichis pour l'observabilité
 - **📝 Logs Structurés** : Correlation des requêtes avec IDs uniques
 - **⚡ Performance Optimisée** : Pas de vérification synchrone, sélection des targets saines uniquement
+- **🔒 Circuit Breaker** : Protection automatique contre les défaillances en cascade
 - **🐳 Docker Ready** : Multi-stage builds, sécurité renforcée, 146MB seulement
-- **⚙️ Configuration Flexible** : Validation automatique + variables d'environnement
+- **⚙️ Configuration Flexible** : Validation automatique + variables d'environnement avancées
 - **🔧 CI/CD Complet** : GitHub Actions pour tests, builds et releases automatiques
 
 ## 🚦 Installation
@@ -69,6 +70,15 @@ HOST=0.0.0.0
 
 # Niveau de logs
 LOG_LEVEL=info
+
+# Intervalle des health checks (ms)
+HEALTH_CHECK_INTERVAL=30000
+
+# Status HTTP maximum considéré comme sain
+MAX_HEALTHY_STATUS=499
+
+# Seuil d'échecs pour ouvrir le circuit breaker
+CIRCUIT_BREAKER_THRESHOLD=3
 ```
 
 ## 🛠️ Utilisation
@@ -137,7 +147,12 @@ Réponse :
     "proxy_total_targets": 3
   },
   "uptime_seconds": 3600,
-  "memory_usage": {...}
+  "memory_usage": {...},
+  "config_summary": {
+    "targets_count": 3,
+    "health_check_interval": 30000,
+    "circuit_breaker_threshold": 3
+  }
 }
 ```
 
