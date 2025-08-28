@@ -52,16 +52,16 @@ jobs:
     - name: Test endpoints (smoke test)
       run: |
         # Start server in background
-        TARGET_URLS="localhost:8080" \
+        TARGET_URLS="httpbin.org:80" \
         PORT=7777 \
-        TIMEOUT=1000 \
+        TIMEOUT=5000 \
         node dist/index.js &
         SERVER_PID=$!
         
-        # Wait for server to start
-        sleep 3
+        # Wait for server to start and health checks to complete
+        sleep 10
         
-        # Test health endpoint
+        # Test health endpoint (should be 200 with healthy target)
         if curl -f -s http://localhost:7777/health > /dev/null; then
           echo "✅ Health endpoint accessible"
         else
