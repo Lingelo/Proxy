@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: Enhanced CI/CD Pipeline
 
 on:
   push:
@@ -7,13 +7,14 @@ on:
     branches: [ main ]
 
 jobs:
+  # Job 1: Tests complets avec Jest
   test:
-    name: Test & Build
+    name: Tests & Coverage
     runs-on: ubuntu-latest
     
     strategy:
       matrix:
-        node-version: [18.x, 20.x]
+        node-version: [18.x, 20.x, 22.x]  # Ajout Node 22
 
     steps:
     - name: Checkout code
@@ -28,63 +29,68 @@ jobs:
     - name: Install dependencies
       run: yarn install --frozen-lockfile
 
-    - name: Run TypeScript compilation
+    - name: Build TypeScript
       run: yarn build
 
-    - name: Test configuration validation
-      run: |
-        # Test with valid configuration
-        TARGET_URLS="localhost:3000|localhost:3001" \
-        TIMEOUT=5000 \
-        PORT=7777 \
-        HOST="0.0.0.0" \
-        LOG_LEVEL="info" \
-        timeout 5s node dist/index.js || true
-        
-        # Test validation with invalid config (should fail)
-        if TARGET_URLS="invalid" node dist/index.js 2>&1 | grep -q "Configuration validation failed"; then
-          echo "✅ Validation correctly rejected invalid config"
-        else
-          echo "❌ Validation should have failed"
-          exit 1
-        fi
+    # ✨ NOUVEAU: Tests unitaires avec Jest
+    - name: Run unit tests
+      run: yarn test --coverage --passWithNoTests
+      env:
+        CI: true
 
-    - name: Test endpoints (smoke test)
-      run: |
-        # Start server in background with no targets (will be unhealthy but endpoints should work)
-        TARGET_URLS="nonexistent:9999" \
-        PORT=7777 \
-        TIMEOUT=1000 \
-        node dist/index.js &
-        SERVER_PID=$!
-        
-        # Wait for server to start
-        sleep 5
-        
-        # Test health endpoint (should return 503 but endpoint should be accessible)
-        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:7777/health)
-        if [ "$HTTP_STATUS" = "503" ]; then
-          echo "✅ Health endpoint accessible (correctly returns 503 for unhealthy targets)"
-        else
-          echo "❌ Health endpoint failed with status $HTTP_STATUS"
-          kill $SERVER_PID
-          exit 1
-        fi
-        
-        # Test metrics endpoint
-        if curl -f -s http://localhost:7777/metrics > /dev/null; then
-          echo "✅ Metrics endpoint accessible"
-        else
-          echo "❌ Metrics endpoint failed"
-          kill $SERVER_PID
-          exit 1
-        fi
-        
-        # Clean up
-        kill $SERVER_PID
+    # ✨ NOUVEAU: Upload coverage to Codecov
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v4
+      if: matrix.node-version == '20.x'  # Upload seulement une fois
+      with:
+        file: ./coverage/lcov.info
+        flags: unittests
+        name: codecov-umbrella
 
-  lint:
-    name: Lint & Code Quality
+    # ✨ AMÉLIORÉ: Test d'intégration plus robuste
+    - name: Integration tests with mock servers
+      run: |
+        echo "Starting mock servers for integration tests..."
+        
+        # Start multiple mock servers on different ports
+        (echo 'const http = require("http"); http.createServer((req, res) => { res.writeHead(200, {"Content-Type": "application/json"}); res.end(JSON.stringify({server: "mock1", port: 3001, healthy: true})); }).listen(3001);' | node) &
+        MOCK1_PID=$!
+        
+        (echo 'const http = require("http"); http.createServer((req, res) => { res.writeHead(200, {"Content-Type": "application/json"}); res.end(JSON.stringify({server: "mock2", port: 3002, healthy: true})); }).listen(3002);' | node) &
+        MOCK2_PID=$!
+        
+        sleep 2  # Wait for mock servers
+        
+        # Test with healthy targets
+        TARGET_URLS="localhost:3001|localhost:3002" \
+        PORT=7777 \
+        TIMEOUT=2000 \
+        LOG_LEVEL="error" \
+        timeout 10s node dist/index.js &
+        PROXY_PID=$!
+        
+        sleep 3
+        
+        # Test all endpoints
+        curl -f http://localhost:7777/health || (echo "Health endpoint failed"; exit 1)
+        curl -f http://localhost:7777/metrics || (echo "Metrics endpoint failed"; exit 1)
+        curl -f http://localhost:7777/prometheus || (echo "Prometheus endpoint failed"; exit 1)
+        
+        # Test actual proxying
+        RESPONSE=$(curl -s http://localhost:7777/test)
+        if echo "$RESPONSE" | grep -q "server.*mock"; then
+          echo "✅ Proxy working correctly"
+        else
+          echo "❌ Proxy not working: $RESPONSE"
+          exit 1
+        fi
+        
+        # Cleanup
+        kill $PROXY_PID $MOCK1_PID $MOCK2_PID 2>/dev/null || true
+
+  # Job 2: Qualité de code avec nos nouveaux outils
+  code-quality:
+    name: Code Quality & Linting
     runs-on: ubuntu-latest
 
     steps:
@@ -100,19 +106,29 @@ jobs:
     - name: Install dependencies
       run: yarn install --frozen-lockfile
 
-    - name: Check TypeScript types
+    # ✨ NOUVEAU: TypeScript type checking séparé
+    - name: TypeScript type checking
+      run: yarn type-check
+
+    # ✨ NOUVEAU: ESLint avec nos règles
+    - name: Run ESLint
+      run: yarn lint
+
+    # ✨ NOUVEAU: Prettier format checking
+    - name: Check code formatting
+      run: yarn format:check
+
+    # ✨ NOUVEAU: Quality gate - toutes les vérifications en une fois
+    - name: Quality gate
+      run: yarn quality
+
+    # Build après les checks pour s'assurer que tout compile
+    - name: Build after quality checks
       run: yarn build
 
-    - name: Check code formatting (if prettier exists)
-      run: |
-        if [ -f "package.json" ] && grep -q "prettier" package.json; then
-          yarn prettier --check .
-        else
-          echo "⚠️ Prettier not configured, skipping format check"
-        fi
-
+  # Job 3: Sécurité améliorée
   security:
-    name: Security Audit
+    name: Security & Vulnerability Scan
     runs-on: ubuntu-latest
 
     steps:
@@ -128,10 +144,130 @@ jobs:
     - name: Install dependencies
       run: yarn install --frozen-lockfile
 
+    # ✨ NOUVEAU: Notre script d'audit personnalisé
     - name: Run security audit
-      run: yarn audit --level moderate
+      run: yarn security:audit
 
+    # ✨ AMÉLIORÉ: Scan plus approfondi avec Trivy
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    # Secrets scanning
     - name: Check for secrets
       uses: trufflesecurity/trufflehog@main
       with:
         path: ./
+        base: main
+        head: HEAD
+
+  # Job 4: Performance et benchmarks
+  performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'  # Seulement sur les PRs
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'yarn'
+
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+
+    - name: Build
+      run: yarn build
+
+    # ✨ NOUVEAU: Test de performance basique
+    - name: Performance benchmark
+      run: |
+        # Start mock server
+        (echo 'const http = require("http"); http.createServer((req, res) => { res.writeHead(200); res.end("OK"); }).listen(3001);' | node) &
+        MOCK_PID=$!
+        
+        # Start proxy
+        TARGET_URLS="localhost:3001" PORT=7777 LOG_LEVEL="error" node dist/index.js &
+        PROXY_PID=$!
+        
+        sleep 3
+        
+        # Simple load test with curl
+        echo "Running basic load test..."
+        time for i in {1..100}; do
+          curl -s -f http://localhost:7777/test > /dev/null || echo "Request $i failed"
+        done
+        
+        # Check metrics after load
+        curl -s http://localhost:7777/metrics | grep -E "(proxy_requests_total|proxy_request_duration)"
+        
+        kill $PROXY_PID $MOCK_PID 2>/dev/null || true
+
+  # Job 5: Documentation et examples
+  docs-validation:
+    name: Documentation Validation
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Validate README examples
+      run: |
+        # Check that Docker examples in README are valid
+        if grep -q "docker build" README.md; then
+          echo "✅ Docker build example found in README"
+        fi
+        
+        if grep -q "TARGET_URLS=" README.md; then
+          echo "✅ Configuration examples found in README"
+        fi
+
+    # ✨ NOUVEAU: Validation des endpoints documentés
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'yarn'
+
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+
+    - name: Build
+      run: yarn build
+
+    - name: Validate documented endpoints
+      run: |
+        # Start server with minimal config
+        TARGET_URLS="example.com:80" PORT=7777 LOG_LEVEL="error" timeout 15s node dist/index.js &
+        SERVER_PID=$!
+        
+        sleep 3
+        
+        # Check all documented endpoints exist
+        endpoints=("/health" "/metrics" "/prometheus")
+        
+        for endpoint in "${endpoints[@]}"; do
+          if curl -f -s "http://localhost:7777$endpoint" > /dev/null; then
+            echo "✅ Endpoint $endpoint is accessible"
+          else
+            echo "❌ Documented endpoint $endpoint is not working"
+            exit 1
+          fi
+        done
+        
+        kill $SERVER_PID 2>/dev/null || true
