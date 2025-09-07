@@ -1,3 +1,3 @@
-import {startProxyServer} from "./core/proxy";
+import { startProxyServer } from './core/proxy';
 
-startProxyServer()
+startProxyServer();
