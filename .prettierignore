@@ -5,3 +5,10 @@ coverage/
 .env
 .env.*
 *.md
+.github/
+*.yml
+*.yaml
+*.json
+*.js
+!src/**/*.js
+!tests/**/*.js
