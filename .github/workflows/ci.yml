@@ -37,7 +37,7 @@ jobs:
       run: yarn lint
 
     - name: Security audit
-      run: yarn security:audit || true  # Don't fail on warnings
+      run: yarn audit || true  # Don't fail on warnings
 
     - name: Smoke test
       run: |

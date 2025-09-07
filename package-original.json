@@ -8,12 +8,19 @@
     "dev": "node -r ts-node/register --env-file=.env src/index.ts --trace-warnings",
     "start": "node dist/index.js",
     "test": "jest",
+    "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "eslint src/**/*.ts tests/**/*.ts",
     "lint:fix": "eslint src/**/*.ts tests/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts tests/**/*.ts",
     "format:check": "prettier --check src/**/*.ts tests/**/*.ts",
-    "audit": "yarn audit --audit-level moderate"
+    "type-check": "tsc --noEmit",
+    "quality": "yarn lint && yarn format:check && yarn type-check",
+    "security:audit": "yarn audit --audit-level moderate",
+    "security:fix": "yarn audit fix",
+    "docker:build": "docker build -t smart-proxy .",
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up",
+    "docker:prod": "docker-compose up"
   },
   "keywords": [
     "proxy",

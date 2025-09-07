@@ -38,7 +38,20 @@ yarn dev
 yarn build
 
 # Run built application
-node dist/index.js
+yarn start
+
+# Testing
+yarn test                 # Run all tests
+yarn test:coverage        # Run tests with coverage report
+
+# Code Quality
+yarn lint                 # Check code quality
+yarn lint:fix             # Auto-fix linting issues
+yarn format               # Format code with Prettier
+yarn format:check         # Check code formatting
+
+# Security
+yarn audit               # Check for vulnerabilities
 ```
 
 ## Configuration
