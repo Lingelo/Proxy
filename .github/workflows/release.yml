@@ -82,7 +82,7 @@ jobs:
           
           ### With Docker
           ```bash
-          docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          docker pull freuhlon/smart-proxy:${{ github.ref_name }}
           ```
           
           ### From Source
@@ -95,9 +95,9 @@ jobs:
           
           ${{ steps.changelog.outputs.CHANGELOG }}
           
-          ## 🐳 Docker Images
-          - `ghcr.io/${{ github.repository }}:${{ github.ref_name }}`
-          - `ghcr.io/${{ github.repository }}:latest` (if this is the latest release)
+          ## Docker Images
+          - `freuhlon/smart-proxy:${{ github.ref_name }}`
+          - `freuhlon/smart-proxy:latest`
         draft: false
         prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
 
